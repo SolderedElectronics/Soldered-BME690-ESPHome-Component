@@ -1,31 +1,17 @@
-# Soldered NAZIV PROIZVODA ESPHome Component
+# Soldered BME690 ESPHome Component
 
-| ![Product name](https://upload.wikimedia.org/wikipedia/commons/8/8f/Example_image.svg) |
-| :------------------------------------------------------------------------------------: |
-|                      [NAZIV PROIZVODA](https://www.solde.red/SKU)                      |
+| ![BME690 breakout board](https://raw.githubusercontent.com/SolderedElectronics/Soldered-BME690-ESPHome-Component/main/extras/BME690.jpg) |
+| :--------------------------------------------------------------------------------------------------------------------------------------: |
+|                                  [BME690 breakout board](https://www.solde.red/333411)                                  |
 
-OPIS PROIZVODA + LINK NA [Qwiic ecosystem](https://soldered.com/collections/qwiic-ecosystem).
+Breakout board for the Bosch BME690 sensor, which measures temperature, relative humidity, barometric pressure and gas
+resistance (VOC). The board communicates over I2C only and is part of the
+[Qwiic ecosystem](https://soldered.com/collections/qwiic-ecosystem).
 
-External ESPHome component for NAZIV PROIZVODA.
-
-### Using the template
-
-Before publishing a new component make sure to replace:
-
-- `NAZIV PROIZVODA`, `OPIS PROIZVODA`, product image, and SKU link in this README
-- the `components/soldered_esphome_component_template/` directory name with the real component name
-- `soldered_esphome_component_template` namespace, `SolderedEsphomeComponentTemplate` class name, and `CODEOWNERS` in `__init__.py`, matching names in the `.h`/`.cpp` files and their `#include`
-- `CONFIG_SCHEMA` and `to_code()` in `__init__.py` with the real config options and codegen
-- the `TAG` string and `dump_config()` output in the `.cpp` file
-- `github://SolderedElectronics/<repo>` source path and the sample config in the "Usage" section below
-- `examples/basic.yaml` (rename/add examples as needed, keep `external_components.source.path` pointing at `../components`)
-- `@file`, `@brief`, `@author` Doxygen comments in the `.h`/`.cpp` files to describe the real API
-
-Also make sure to add more examples if the component supports multiple boards/modes (see `Soldered-Inkplate-ESPHome` for a repo with several board variants).
-
-Run `pip install clang-format==13.0.1 && find components -name "*.cpp" -o -name "*.h" | xargs clang-format -i` before committing to auto-format the component against ESPHome's own style (`.clang-format`, copied from the ESPHome core repo). CI runs the same check on every push/PR via `.github/workflows/format_check.yml` and fails on unformatted code. `.github/workflows/build.yml` compiles every YAML under `examples/` on every push/PR.
-
-**Remove this section of README after everything is done!**
+External ESPHome component for the Soldered BME690 breakout board. It is a port of the
+[Soldered BME690 Arduino library](https://github.com/SolderedElectronics/Soldered-BME690-Arduino-Library) and wraps the
+official Bosch BME69x Sensor API, which is vendored unmodified in `components/bme690/bme69x.c`, `bme69x.h` and
+`bme69x_defs.h`.
 
 ## Repository Contents
 
@@ -38,17 +24,92 @@ Reference this repo directly from your own ESPHome YAML (no need to clone it loc
 
 ```yaml
 external_components:
-  - source: github://SolderedElectronics/<repo>
-    components: [soldered_esphome_component_template]
+  - source: github://SolderedElectronics/Soldered-BME690-ESPHome-Component
+    components: [bme690]
 
-soldered_esphome_component_template:
+i2c:
+  sda: GPIO21
+  scl: GPIO22
+
+sensor:
+  - platform: bme690
+    address: 0x76
+    update_interval: 60s
+    temperature:
+      name: "BME690 Temperature"
+    pressure:
+      name: "BME690 Pressure"
+    humidity:
+      name: "BME690 Humidity"
+    gas_resistance:
+      name: "BME690 Gas Resistance"
 ```
 
-See [`examples/basic.yaml`](examples/basic.yaml) for a full working example.
+See [`examples/forced_mode.yaml`](examples/forced_mode.yaml) for a full working example.
+
+### Configuration variables
+
+- **address** (*Optional*, int): I2C address of the sensor. Defaults to `0x76`, use `0x77` if the address jumper is
+  soldered.
+- **update_interval** (*Optional*, [Time](https://esphome.io/guides/configuration-types#config-time)): how often the
+  values are published. Defaults to `60s`.
+- **operation_mode** (*Optional*, string): `forced`, `parallel` or `sequential`. Defaults to `forced`.
+- **iir_filter** (*Optional*, string): coefficient of the IIR filter applied to the temperature and pressure readings.
+  One of `OFF`, `1X`, `3X`, `7X`, `15X`, `31X`, `63X`, `127X`. Defaults to `OFF`.
+- **odr** (*Optional*, string): sleep duration between two profile steps in sequential mode. One of `0.59ms`, `10ms`,
+  `20ms`, `62.5ms`, `125ms`, `250ms`, `500ms`, `1000ms`, `none`. Defaults to `0.59ms`.
+- **temperature**, **pressure**, **humidity** (*Optional*): [Sensors](https://esphome.io/components/sensor/) published
+  in °C, hPa and %. Each one also takes an **oversampling** option, one of `NONE`, `1X`, `2X`, `4X`, `8X`, `16X`. The
+  defaults are `2X`, `16X` and `1X`.
+- **gas_resistance** (*Optional*): [Sensor](https://esphome.io/components/sensor/) publishing the last valid gas
+  resistance of the measurement in Ω.
+- **heater** (*Optional*): gas heater configuration, see below.
+
+#### Heater
+
+In `forced` mode the heater is described by a single temperature and duration:
+
+- **temperature** (*Optional*, int): heater plate temperature in °C, at most 400. Defaults to `320`.
+- **duration** (*Optional*, [Time](https://esphome.io/guides/configuration-types#config-time)): heating duration before
+  every measurement. Defaults to `150ms`.
+
+In `parallel` and `sequential` mode the heater sweeps through a **profile** of up to ten steps instead. Every step
+takes a **temperature** and an optional **gas_resistance** sensor of its own, plus:
+
+- **duration** (*sequential* mode, required): how long this step heats for.
+- **multiplier** (*parallel* mode, required): how many shared heater durations this step lasts, between 1 and 255.
+
+Parallel mode additionally takes a **shared_duration** (defaults to `140ms`), the duration of a single profile step.
+The time the temperature, pressure and humidity measurement takes is subtracted from it automatically to get the shared
+heater duration the sensor expects.
+
+### Examples
+
+- [`examples/forced_mode.yaml`](examples/forced_mode.yaml) - one measurement per update interval, the sensor sleeps in
+  between.
+- [`examples/parallel_mode.yaml`](examples/parallel_mode.yaml) - the gas sensor sweeps through a heater profile while
+  temperature, pressure and humidity are measured continuously.
+- [`examples/sequential_mode.yaml`](examples/sequential_mode.yaml) - the sensor steps through the heater profile on its
+  own, sleeping between the measurements.
+
+All examples are written for a generic ESP32 board (`esp32dev`) with the sensor on `GPIO21`/`GPIO22`.
+
+### Development
+
+Run the following before committing to auto-format the component against ESPHome's own style:
+
+```sh
+pip install clang-format==13.0.1
+find components \( -name "*.cpp" -o -name "*.h" \) -not -name "bme69x*" | xargs clang-format -i
+```
+
+The vendored Bosch BME69x Sensor API (`bme69x*`) is kept unmodified and is excluded from formatting. CI runs the same
+check on every push/PR via `.github/workflows/format_check.yml` and fails on unformatted code.
+`.github/workflows/build.yml` compiles every YAML under `examples/` on every push/PR.
 
 ### Hardware design
 
-You can find hardware design for this board in the _NAZIV PROIZVODA_ hardware repository.
+You can find hardware design for this board in the _BME690 breakout board_ hardware repository.
 
 ### Documentation
 

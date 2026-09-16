@@ -20,4 +20,5 @@ jobs:
         run: pip install clang-format==13.0.1
 
       - name: Check formatting
-        run: find components -name "*.cpp" -o -name "*.h" | xargs clang-format --dry-run --Werror
+        # The vendored Bosch BME69x Sensor API is kept unmodified and is not formatted.
+        run: find components \( -name "*.cpp" -o -name "*.h" \) -not -name "bme69x*" | xargs clang-format --dry-run --Werror

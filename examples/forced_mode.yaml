@@ -1,0 +1,47 @@
+# Forced mode: the sensor takes one temperature, pressure, humidity and gas
+# measurement per update_interval and sleeps in between. This is the mode to
+# use for plain environmental monitoring.
+
+esphome:
+  name: bme690-forced-mode
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+logger:
+  level: DEBUG
+
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components: [bme690]
+
+i2c:
+  sda: GPIO21
+  scl: GPIO22
+  scan: true
+
+sensor:
+  - platform: bme690
+    address: 0x76
+    update_interval: 60s
+    operation_mode: forced
+    iir_filter: 3X
+    temperature:
+      name: "BME690 Temperature"
+      oversampling: 2X
+    pressure:
+      name: "BME690 Pressure"
+      oversampling: 16X
+    humidity:
+      name: "BME690 Humidity"
+      oversampling: 1X
+    gas_resistance:
+      name: "BME690 Gas Resistance"
+    heater:
+      # Heat the gas sensor plate to 300 °C for 100 ms before every measurement.
+      temperature: 300
+      duration: 100ms
